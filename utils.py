@@ -2,6 +2,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
+def debug_print(*args, **kwargs):
+    """
+    可控制的打印函数，根据config.DEBUG_PRINT配置决定是否输出
+    """
+    try:
+        import config
+        if config.DEBUG_PRINT:
+            print(*args, **kwargs)
+    except ImportError:
+        # 如果无法导入config，默认启用打印
+        print(*args, **kwargs)
+
 def render_env(env, save=False, filename=None):
     """
     Render the environment: plot agents, resident points, and central station.
@@ -19,7 +31,7 @@ def render_env(env, save=False, filename=None):
     for pos in env.agent_positions:
         plt.scatter(pos[0], pos[1], c='blue', marker='s')
 
-    # Plot central detection station
+    # Plot home base (central station) 
     plt.scatter(env.central_station[0], env.central_station[1], c='black', marker='*', s=200)
 
     plt.xlim(0, env.size)
@@ -105,8 +117,8 @@ def plot_reward_curve2(all_rewards, filename="reward_curve2.png", smooth=0.9):
 def plot_agent_trajectories(agent_paths, points, central_station, episode_id, foldername="trajectories"):
     """
     agent_paths: list of list of positions per agent, shape: [num_agents][timesteps][2]
-    points: ndarray of shape [num_points, 2]
-    central_station: [2] array
+    points: ndarray of shape [num_points, 2] - sampling points
+    central_station: [2] array - home base where agents start/return/unload
     """
     plt.figure(figsize=(8, 8))
     colors = ['r', 'g', 'b', 'c', 'm', 'y', 'k']
@@ -119,7 +131,7 @@ def plot_agent_trajectories(agent_paths, points, central_station, episode_id, fo
         path_array = np.array(path)
         
         if path_array.ndim != 2 or path_array.shape[1] != 2:
-            print(f"Warning: Skipping plotting for agent {idx+1} due to invalid path shape: {path_array.shape}")
+            debug_print(f"Warning: Skipping plotting for agent {idx+1} due to invalid path shape: {path_array.shape}")
             continue
 
         plt.plot(path_array[:, 0], path_array[:, 1], color=colors[idx % len(colors)], label=f"Agent {idx+1}", marker='.')
@@ -127,7 +139,7 @@ def plot_agent_trajectories(agent_paths, points, central_station, episode_id, fo
         plt.scatter(path_array[-1, 0], path_array[-1, 1], color=colors[idx % len(colors)], marker='x', s=100)
 
     plt.scatter(points[:, 0], points[:, 1], color='gray', marker='^', label='Sampling Points')
-    plt.scatter(central_station[0], central_station[1], color='black', marker='s', s=150, label='Central Station')
+    plt.scatter(central_station[0], central_station[1], color='black', marker='s', s=150, label='Home Base (Central Station)')
 
     plt.title(f"Agent Trajectories at Episode {episode_id}")
     plt.xlabel("X Coordinate")

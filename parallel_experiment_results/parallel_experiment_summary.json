@@ -1,0 +1,269 @@
+{
+  "start_time": "2025-08-15T16:20:11.832579",
+  "end_time": "2025-08-17T06:38:06.038050",
+  "total_duration": 137874.205471,
+  "experiment_levels": [
+    "basic",
+    "load_efficiency",
+    "role_specialization",
+    "collaboration",
+    "behavior_shaping",
+    "full"
+  ],
+  "seeds": [
+    42,
+    123,
+    2024,
+    888,
+    1337
+  ],
+  "episodes_per_experiment": 3000,
+  "results": [
+    {
+      "level": "basic",
+      "process_id": 36048,
+      "start_time": "2025-08-15T16:20:17.191225",
+      "seeds_results": [
+        {
+          "seed": 42,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\basic\\basic_seed42_proc36048_20250815_162017",
+          "timestamp": "2025-08-16T00:40:47.768964"
+        },
+        {
+          "seed": 123,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\basic\\basic_seed123_proc36048_20250816_004047",
+          "timestamp": "2025-08-16T08:12:59.596395"
+        },
+        {
+          "seed": 2024,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\basic\\basic_seed2024_proc36048_20250816_081259",
+          "timestamp": "2025-08-16T16:01:20.720612"
+        },
+        {
+          "seed": 888,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\basic\\basic_seed888_proc36048_20250816_160120",
+          "timestamp": "2025-08-16T22:57:15.920745"
+        },
+        {
+          "seed": 1337,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\basic\\basic_seed1337_proc36048_20250816_225715",
+          "timestamp": "2025-08-17T04:26:37.619839"
+        }
+      ],
+      "total_success": 5,
+      "total_failed": 0,
+      "end_time": "2025-08-17T04:26:37.619839",
+      "duration": 129980.428614
+    },
+    {
+      "level": "load_efficiency",
+      "process_id": 12292,
+      "start_time": "2025-08-15T16:20:17.192226",
+      "seeds_results": [
+        {
+          "seed": 42,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\load_efficiency\\load_efficiency_seed42_proc12292_20250815_162017",
+          "timestamp": "2025-08-16T01:49:01.614784"
+        },
+        {
+          "seed": 123,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\load_efficiency\\load_efficiency_seed123_proc12292_20250816_014901",
+          "timestamp": "2025-08-16T09:46:49.347309"
+        },
+        {
+          "seed": 2024,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\load_efficiency\\load_efficiency_seed2024_proc12292_20250816_094649",
+          "timestamp": "2025-08-16T18:08:34.213500"
+        },
+        {
+          "seed": 888,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\load_efficiency\\load_efficiency_seed888_proc12292_20250816_180834",
+          "timestamp": "2025-08-17T01:12:20.657548"
+        },
+        {
+          "seed": 1337,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\load_efficiency\\load_efficiency_seed1337_proc12292_20250817_011220",
+          "timestamp": "2025-08-17T06:38:05.967963"
+        }
+      ],
+      "total_success": 5,
+      "total_failed": 0,
+      "end_time": "2025-08-17T06:38:05.968964",
+      "duration": 137868.776738
+    },
+    {
+      "level": "role_specialization",
+      "process_id": 39956,
+      "start_time": "2025-08-15T16:20:17.192226",
+      "seeds_results": [
+        {
+          "seed": 42,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\role_specialization\\role_specialization_seed42_proc39956_20250815_162017",
+          "timestamp": "2025-08-16T01:39:39.526335"
+        },
+        {
+          "seed": 123,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\role_specialization\\role_specialization_seed123_proc39956_20250816_013939",
+          "timestamp": "2025-08-16T09:14:08.803340"
+        },
+        {
+          "seed": 2024,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\role_specialization\\role_specialization_seed2024_proc39956_20250816_091408",
+          "timestamp": "2025-08-16T16:57:10.835145"
+        },
+        {
+          "seed": 888,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\role_specialization\\role_specialization_seed888_proc39956_20250816_165710",
+          "timestamp": "2025-08-17T00:49:38.941171"
+        },
+        {
+          "seed": 1337,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\role_specialization\\role_specialization_seed1337_proc39956_20250817_004938",
+          "timestamp": "2025-08-17T05:51:49.775545"
+        }
+      ],
+      "total_success": 5,
+      "total_failed": 0,
+      "end_time": "2025-08-17T05:51:49.776547",
+      "duration": 135092.584321
+    },
+    {
+      "level": "collaboration",
+      "process_id": 3448,
+      "start_time": "2025-08-15T16:20:17.198469",
+      "seeds_results": [
+        {
+          "seed": 42,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\collaboration\\collaboration_seed42_proc3448_20250815_162017",
+          "timestamp": "2025-08-15T21:42:41.741617"
+        },
+        {
+          "seed": 123,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\collaboration\\collaboration_seed123_proc3448_20250815_214241",
+          "timestamp": "2025-08-16T02:20:24.204464"
+        },
+        {
+          "seed": 2024,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\collaboration\\collaboration_seed2024_proc3448_20250816_022024",
+          "timestamp": "2025-08-16T08:04:11.384586"
+        },
+        {
+          "seed": 888,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\collaboration\\collaboration_seed888_proc3448_20250816_080411",
+          "timestamp": "2025-08-16T13:03:10.371891"
+        },
+        {
+          "seed": 1337,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\collaboration\\collaboration_seed1337_proc3448_20250816_130310",
+          "timestamp": "2025-08-16T19:11:14.584074"
+        }
+      ],
+      "total_success": 5,
+      "total_failed": 0,
+      "end_time": "2025-08-16T19:11:14.585561",
+      "duration": 96657.387092
+    },
+    {
+      "level": "behavior_shaping",
+      "process_id": 42748,
+      "start_time": "2025-08-15T16:20:17.203468",
+      "seeds_results": [
+        {
+          "seed": 42,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\behavior_shaping\\behavior_shaping_seed42_proc42748_20250815_162017",
+          "timestamp": "2025-08-15T22:14:36.023065"
+        },
+        {
+          "seed": 123,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\behavior_shaping\\behavior_shaping_seed123_proc42748_20250815_221436",
+          "timestamp": "2025-08-16T06:27:18.984835"
+        },
+        {
+          "seed": 2024,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\behavior_shaping\\behavior_shaping_seed2024_proc42748_20250816_062718",
+          "timestamp": "2025-08-16T11:30:49.720182"
+        },
+        {
+          "seed": 888,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\behavior_shaping\\behavior_shaping_seed888_proc42748_20250816_113049",
+          "timestamp": "2025-08-16T17:31:12.737014"
+        },
+        {
+          "seed": 1337,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\behavior_shaping\\behavior_shaping_seed1337_proc42748_20250816_173112",
+          "timestamp": "2025-08-16T22:40:40.945515"
+        }
+      ],
+      "total_success": 5,
+      "total_failed": 0,
+      "end_time": "2025-08-16T22:40:40.945515",
+      "duration": 109223.742047
+    },
+    {
+      "level": "full",
+      "process_id": 41368,
+      "start_time": "2025-08-15T16:20:17.208154",
+      "seeds_results": [
+        {
+          "seed": 42,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\full\\full_seed42_proc41368_20250815_162017",
+          "timestamp": "2025-08-15T23:06:08.519677"
+        },
+        {
+          "seed": 123,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\full\\full_seed123_proc41368_20250815_230608",
+          "timestamp": "2025-08-16T06:47:32.232125"
+        },
+        {
+          "seed": 2024,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\full\\full_seed2024_proc41368_20250816_064732",
+          "timestamp": "2025-08-16T13:49:24.827173"
+        },
+        {
+          "seed": 888,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\full\\full_seed888_proc41368_20250816_134924",
+          "timestamp": "2025-08-16T20:41:12.945258"
+        },
+        {
+          "seed": 1337,
+          "success": true,
+          "experiment_dir": "parallel_experiment_results\\full\\full_seed1337_proc41368_20250816_204112",
+          "timestamp": "2025-08-17T01:53:00.060604"
+        }
+      ],
+      "total_success": 5,
+      "total_failed": 0,
+      "end_time": "2025-08-17T01:53:00.061608",
+      "duration": 120762.853454
+    }
+  ]
+}

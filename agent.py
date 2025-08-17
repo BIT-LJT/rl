@@ -86,27 +86,65 @@ class Critic(nn.Module):
         return self.concat_fc2(x)
 
 class MADDPGAgent(nn.Module):
-    def __init__(self, agent_obs_dim, action_dim, hidden_dim=256, lr_actor=1e-4, lr_critic=1e-3, gamma=0.99, tau=0.005):
+    def __init__(self, agent_local_obs_dim, point_feature_dim, num_points, num_agents, action_dim, hidden_dim=256, lr_actor=1e-4, lr_critic=1e-3, gamma=0.99, tau=0.005):
         super().__init__()
         self.action_dim = action_dim
-        self.actor = Actor(agent_obs_dim, action_dim, hidden_dim)
-        self.critic = Critic(agent_obs_dim, action_dim, hidden_dim)
-        self.actor_target = Actor(agent_obs_dim, action_dim, hidden_dim)
-        self.critic_target = Critic(agent_obs_dim, action_dim, hidden_dim)
+        self.num_agents = num_agents
+        self.agent_local_obs_dim = agent_local_obs_dim
+        
+        # 集成Transformer到Agent中，实现端到端训练
+        self.transformer = TransformerEncoder(point_input_dim=point_feature_dim, agent_local_obs_dim=agent_local_obs_dim, emb_dim=64)
+        
+        # 计算Actor和Critic的输入维度
+        # 包含：agent本地观测 + transformer输出特征 + 其他智能体观测
+        transformer_output_dim = 64  # transformer的emb_dim
+        other_agents_obs_dim = (num_agents - 1) * agent_local_obs_dim
+        full_obs_dim = agent_local_obs_dim + transformer_output_dim + other_agents_obs_dim
+        
+        self.actor = Actor(full_obs_dim, action_dim, hidden_dim)
+        self.critic = Critic(full_obs_dim, action_dim, hidden_dim)
+        self.actor_target = Actor(full_obs_dim, action_dim, hidden_dim)
+        self.critic_target = Critic(full_obs_dim, action_dim, hidden_dim)
 
         self.actor_target.load_state_dict(self.actor.state_dict())
         self.critic_target.load_state_dict(self.critic.state_dict())
 
-        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=lr_actor)
+        # 关键修复：将Transformer参数包含在优化器中，实现端到端训练
+        actor_params = list(self.actor.parameters()) + list(self.transformer.parameters())
+        self.actor_optimizer = optim.Adam(actor_params, lr=lr_actor)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=lr_critic)
         self.gamma = gamma
         self.tau = tau
+        
+        # 保存初始学习率用于学习率调度
+        self.initial_lr_actor = lr_actor
+        self.initial_lr_critic = lr_critic
 
-    def act(self, obs, noise_std=0.1, action_mask=None):
+    def act(self, agent_local_obs, point_features, other_agents_obs, noise_std=0.1, action_mask=None):
         """
-        根据观测选择动作, 并应用动作掩码.
+        根据观测选择动作，内部调用Transformer进行端到端学习
+        
+        Args:
+            agent_local_obs: 智能体本地观测 [agent_local_obs_dim]
+            point_features: 任务点特征 [num_points, point_feature_dim]  
+            other_agents_obs: 其他智能体观测 [other_agents_obs_dim]
+            noise_std: 噪声标准差
+            action_mask: 动作掩码
         """
-        logits = self.actor(obs)
+        # 调用Transformer生成任务点注意力权重和特征
+        attn_probs, transformer_features = self.transformer(point_features, agent_local_obs)
+        
+        # 使用注意力权重对任务点特征进行加权聚合，生成高级特征表示
+        # transformer_features: [num_points, emb_dim]
+        # attn_probs: [1, num_points]
+        weighted_features = torch.matmul(attn_probs, transformer_features)  # [1, emb_dim]
+        weighted_features = weighted_features.squeeze(0)  # [emb_dim]
+        
+        # 拼接所有特征：本地观测 + Transformer特征 + 其他智能体观测
+        full_obs = torch.cat([agent_local_obs, weighted_features, other_agents_obs], dim=0)
+        
+        # 生成动作logits
+        logits = self.actor(full_obs)
 
         # 应用动作掩码
         if action_mask is not None:
@@ -121,12 +159,51 @@ class MADDPGAgent(nn.Module):
             
         action = torch.argmax(noisy_logits).item()
         return action
+    
+    def _process_state(self, agent_local_obs, point_features, other_agents_obs):
+        """
+        处理状态的辅助方法，生成完整的状态表示
+        
+        Args:
+            agent_local_obs: 智能体本地观测
+            point_features: 任务点特征
+            other_agents_obs: 其他智能体观测
+            
+        Returns:
+            full_obs: 完整的状态表示
+        """
+        # 调用Transformer生成特征
+        with torch.no_grad():
+            attn_probs, transformer_features = self.transformer(point_features, agent_local_obs)
+            
+        # 加权聚合特征
+        weighted_features = torch.matmul(attn_probs, transformer_features).squeeze(0)
+        
+        # 拼接完整状态
+        full_obs = torch.cat([agent_local_obs, weighted_features, other_agents_obs], dim=0)
+        return full_obs
 
-    def update(self, states, actions, rewards, next_states, dones, action_dim):
+    def update(self, states, actions, rewards, next_states, dones, action_dim, is_weights=None):
+        """
+        更新智能体网络 - 支持Transformer端到端训练
+        
+        注意：为了简化实现，假设states和next_states是已经处理过的完整状态表示
+        Transformer的训练通过actor的反向传播实现
+        
+        Args:
+            states: 状态批次 [batch_size, full_obs_dim]
+            actions: 动作批次
+            rewards: 奖励批次
+            next_states: 下一状态批次 [batch_size, full_obs_dim]
+            dones: 结束标志批次
+            action_dim: 动作维度
+            is_weights: 重要性采样权重（用于优先经验回放）
+        
+        Returns:
+            td_errors: TD误差（用于更新优先级）
+        """
         # --- 更新 Critic ---
         next_actions_logits = self.actor_target(next_states)
-        # 注意: 在训练 critic 时, 我们不需要应用动作掩码, 因为我们是根据 actor_target 的输出来计算目标Q值.
-        # 动作掩码主要用于“实际执行”阶段, 保证智能体不会做出无效动作.
         next_actions = torch.argmax(next_actions_logits, dim=1)
         next_actions_one_hot = F.one_hot(next_actions, num_classes=action_dim).float()
 
@@ -137,31 +214,59 @@ class MADDPGAgent(nn.Module):
         current_actions_one_hot = F.one_hot(actions.long(), num_classes=action_dim).float()
         current_q = self.critic(states, current_actions_one_hot)
 
-        critic_loss = F.mse_loss(current_q, target_q)
+        # 计算TD误差（用于优先级更新）
+        td_errors = target_q - current_q
+        
+        # 如果使用优先经验回放，应用重要性采样权重
+        if is_weights is not None:
+            critic_loss = (is_weights.unsqueeze(1) * (td_errors ** 2)).mean()
+        else:
+            critic_loss = F.mse_loss(current_q, target_q)
 
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
         self.critic_optimizer.step()
 
-        # --- 更新 Actor ---
+        # --- 更新 Actor（包含Transformer的端到端训练）---
         actor_actions_logits = self.actor(states)
-        # 在更新 actor 时, 我们使用 Gumbel-Softmax 进行采样, 此时也不直接应用硬掩码.
-        # Actor 的目标是最大化 Critic 的输出, 它会自然地学会避免那些导致低Q值的动作.
-        # 由于我们已经在执行阶段避免了无效动作, replay buffer 中不会有这些“坏”的经验,
-        # Actor 也不会被引导去学习它们.
         actor_actions_one_hot = F.gumbel_softmax(actor_actions_logits, hard=True)
         actor_loss = -self.critic(states, actor_actions_one_hot).mean()
 
+        # 关键：这里的反向传播会同时更新Actor和Transformer的参数
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 1.0)
+        
+        # 对所有参数进行梯度裁剪（包括Transformer）
+        all_actor_params = list(self.actor.parameters()) + list(self.transformer.parameters())
+        torch.nn.utils.clip_grad_norm_(all_actor_params, 1.0)
+        
         self.actor_optimizer.step()
 
         # --- 软更新目标网络 ---
         self._soft_update(self.critic, self.critic_target)
         self._soft_update(self.actor, self.actor_target)
+        
+        # 返回TD误差用于优先级更新
+        return td_errors.detach().cpu().numpy().flatten()
     
     def _soft_update(self, local_model, target_model):
         for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
             target_param.data.copy_(self.tau * local_param.data + (1.0 - self.tau) * target_param.data)
+    
+    def update_learning_rate(self, actor_lr, critic_lr):
+        """
+        更新学习率
+        """
+        for param_group in self.actor_optimizer.param_groups:
+            param_group['lr'] = actor_lr
+        for param_group in self.critic_optimizer.param_groups:
+            param_group['lr'] = critic_lr
+    
+    def get_learning_rates(self):
+        """
+        获取当前学习率
+        """
+        actor_lr = self.actor_optimizer.param_groups[0]['lr']
+        critic_lr = self.critic_optimizer.param_groups[0]['lr']
+        return actor_lr, critic_lr
