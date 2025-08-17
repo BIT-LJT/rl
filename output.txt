@@ -1,0 +1,19 @@
+C:\Users\18800\anaconda3\envs\rl_env\lib\site-packages\torch\nn\functional.py:5560: UserWarning: 1Torch was not compiled with flash attention. (Triggered internally at C:\cb\pytorch_1000000000000\work\aten\src\ATen\native\transformers\cuda\sdp_utils.cpp:555.)
+  attn_output = scaled_dot_product_attention(q, k, v, attn_mask, dropout_p, is_causal)
+Exception in thread Thread-1:
+Traceback (most recent call last):
+  File "C:\Users\18800\anaconda3\envs\rl_env\lib\threading.py", line 932, in _bootstrap_inner
+    self.run()
+  File "C:\Users\18800\anaconda3\envs\rl_env\lib\site-packages\tensorboard\summary\writer\event_file_writer.py", line 233, in run
+    self._record_writer.write(data)
+  File "C:\Users\18800\anaconda3\envs\rl_env\lib\site-packages\tensorboard\summary\writer\record_writer.py", line 40, in write
+    self._writer.write(header + header_crc + data + footer_crc)
+  File "C:\Users\18800\anaconda3\envs\rl_env\lib\site-packages\tensorboard\compat\tensorflow_stub\io\gfile.py", line 766, in write
+    self.fs.append(self.filename, file_content, self.binary_mode)
+  File "C:\Users\18800\anaconda3\envs\rl_env\lib\site-packages\tensorboard\compat\tensorflow_stub\io\gfile.py", line 160, in append
+    self._write(filename, file_content, "ab" if binary_mode else "a")
+  File "C:\Users\18800\anaconda3\envs\rl_env\lib\site-packages\tensorboard\compat\tensorflow_stub\io\gfile.py", line 164, in _write
+    with io.open(filename, mode, encoding=encoding) as f:
+PermissionError: [Errno 13] Permission denied: b'runs/MADDPG_full_20250817_214834_seed123\\events.out.tfevents.1755438514.LIU.4912.0'
+QObject::killTimer: Timers cannot be stopped from another thread
+QObject::~QObject: Timers cannot be stopped from another thread

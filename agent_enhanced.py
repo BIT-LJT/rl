@@ -14,21 +14,46 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from agent import TransformerEncoder, Actor
+from agent import TransformerEncoder
+import config
+
+class ActorEnhanced(nn.Module):
+    """增强版Actor - 加入层归一化提升训练稳定性"""
+    def __init__(self, agent_obs_dim, action_dim, hidden_dim=256):
+        super(ActorEnhanced, self).__init__()
+        self.fc1 = nn.Linear(agent_obs_dim, hidden_dim)
+        self.ln1 = nn.LayerNorm(hidden_dim)  # 新增：层归一化
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.ln2 = nn.LayerNorm(hidden_dim)  # 新增：层归一化
+        self.fc3 = nn.Linear(hidden_dim, action_dim)
+        # 增加 Tanh 激活函数来约束输出范围
+        self.tanh = nn.Tanh()
+
+    def forward(self, state):
+        # 加入层归一化
+        x = F.relu(self.ln1(self.fc1(state)))
+        x = F.relu(self.ln2(self.fc2(x)))
+        # 将 logits 通过 tanh 约束，然后可以乘以一个常数（例如5.0）来调整范围
+        logits = self.fc3(x)
+        scaled_logits = self.tanh(logits) * 5.0 
+        return scaled_logits
 
 class CriticEnhanced(nn.Module):
-    """增强版Critic - 接收所有智能体的动作信息"""
+    """增强版Critic - 接收所有智能体的动作信息，增加层归一化"""
     def __init__(self, agent_obs_dim, action_dim, num_agents, hidden_dim=256):
         super(CriticEnhanced, self).__init__()
         self.num_agents = num_agents
         
         # 第一个网络分支：处理state
         self.state_fc1 = nn.Linear(agent_obs_dim, hidden_dim)
+        self.state_ln1 = nn.LayerNorm(hidden_dim)  # 新增：层归一化
         self.state_fc2 = nn.Linear(hidden_dim, hidden_dim // 2)
+        self.state_ln2 = nn.LayerNorm(hidden_dim // 2)  # 新增：层归一化
 
         # 第二个网络分支：合并state特征和所有智能体的动作
         all_actions_dim = action_dim * num_agents  # 所有智能体的动作
         self.concat_fc1 = nn.Linear(hidden_dim // 2 + all_actions_dim, hidden_dim)
+        self.concat_ln1 = nn.LayerNorm(hidden_dim)  # 新增：层归一化
         self.concat_fc2 = nn.Linear(hidden_dim, 1)
 
     def forward(self, state, all_actions):
@@ -37,15 +62,15 @@ class CriticEnhanced(nn.Module):
             state: 单个智能体的状态 [batch_size, agent_obs_dim]
             all_actions: 所有智能体的动作 [batch_size, num_agents * action_dim]
         """
-        # 处理state
-        state_feature = F.relu(self.state_fc1(state))
-        state_feature = F.relu(self.state_fc2(state_feature))
+        # 处理state（加入层归一化）
+        state_feature = F.relu(self.state_ln1(self.state_fc1(state)))
+        state_feature = F.relu(self.state_ln2(self.state_fc2(state_feature)))
 
         # 拼接state特征和所有智能体的动作
         x = torch.cat([state_feature, all_actions], dim=1)
 
-        # 处理拼接后的向量
-        x = F.relu(self.concat_fc1(x))
+        # 处理拼接后的向量（加入层归一化）
+        x = F.relu(self.concat_ln1(self.concat_fc1(x)))
         return self.concat_fc2(x)
 
 class MADDPGAgentEnhanced(nn.Module):
@@ -65,11 +90,10 @@ class MADDPGAgentEnhanced(nn.Module):
         other_agents_obs_dim = (num_agents - 1) * agent_local_obs_dim
         full_obs_dim = agent_local_obs_dim + transformer_output_dim + other_agents_obs_dim
         
-        self.actor = Actor(full_obs_dim, action_dim, hidden_dim)
-        
-        # 使用增强版Critic
+        # 使用增强版Actor和Critic（包含层归一化）
+        self.actor = ActorEnhanced(full_obs_dim, action_dim, hidden_dim)
         self.critic = CriticEnhanced(full_obs_dim, action_dim, num_agents, hidden_dim)
-        self.actor_target = Actor(full_obs_dim, action_dim, hidden_dim)
+        self.actor_target = ActorEnhanced(full_obs_dim, action_dim, hidden_dim)
         self.critic_target = CriticEnhanced(full_obs_dim, action_dim, num_agents, hidden_dim)
 
         self.actor_target.load_state_dict(self.actor.state_dict())
@@ -120,9 +144,9 @@ class MADDPGAgentEnhanced(nn.Module):
         full_obs = torch.cat([agent_local_obs, weighted_features, other_agents_obs], dim=0)
         return full_obs
 
-    def update(self, agent_id, states, actions, rewards, next_states, dones, all_actions, next_all_actions, is_weights=None):
+    def update_critic(self, agent_id, states, actions, rewards, next_states, dones, all_actions, next_all_actions, is_weights=None):
         """
-        增强版更新方法 - Critic接收所有智能体的动作信息
+        只更新Critic网络 - TD3延迟策略更新的核心
         
         Args:
             agent_id: 当前智能体的ID索引 [0, num_agents)
@@ -135,20 +159,27 @@ class MADDPGAgentEnhanced(nn.Module):
             next_all_actions: 所有智能体下一动作 [batch_size, num_agents]
             is_weights: 重要性采样权重
         """
-        # --- 更新 Critic ---
-        next_actions_logits = self.actor_target(next_states)
-        next_actions = torch.argmax(next_actions_logits, dim=1)
-        
-        # 构建所有智能体的下一动作（这里简化处理，实际应该是所有智能体的目标动作）
-        # 这需要在训练循环中传入所有智能体的下一动作
-        next_all_actions_one_hot = F.one_hot(next_all_actions, num_classes=self.action_dim).float()
-        next_all_actions_flat = next_all_actions_one_hot.view(next_all_actions_one_hot.size(0), -1)
-
+        # --- 计算目标Q值（加入目标策略平滑）---
         with torch.no_grad():
+            next_actions_logits = self.actor_target(next_states)
+            
+            # --- 目标策略平滑（Target Policy Smoothing）---
+            noise_std = config.TARGET_POLICY_NOISE_STD
+            noise_clip = config.TARGET_POLICY_NOISE_CLIP
+            noise = torch.randn_like(next_actions_logits) * noise_std
+            noise = torch.clamp(noise, -noise_clip, noise_clip)
+            noisy_next_logits = next_actions_logits + noise
+            
+            next_actions = torch.argmax(noisy_next_logits, dim=1)
+            
+            # 构建所有智能体的下一动作
+            next_all_actions_one_hot = F.one_hot(next_all_actions, num_classes=self.action_dim).float()
+            next_all_actions_flat = next_all_actions_one_hot.view(next_all_actions_one_hot.size(0), -1)
+            
             target_q = self.critic_target(next_states, next_all_actions_flat)
             target_q = rewards.unsqueeze(1) + self.gamma * target_q * (1 - dones.unsqueeze(1))
 
-        # 当前所有智能体动作
+        # --- 计算当前Q值并更新Critic ---
         all_actions_one_hot = F.one_hot(all_actions, num_classes=self.action_dim).float()
         all_actions_flat = all_actions_one_hot.view(all_actions_one_hot.size(0), -1)
         
@@ -164,15 +195,32 @@ class MADDPGAgentEnhanced(nn.Module):
 
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
+        
+        # 计算梯度范数用于诊断
+        critic_grad_norm = torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 1.0)
+        
         self.critic_optimizer.step()
+        
+        return td_errors.detach().cpu().numpy().flatten(), critic_loss.item(), critic_grad_norm.item()
 
-        # --- 更新 Actor ---
+    def update_actor_and_targets(self, agent_id, states, all_actions, is_weights=None):
+        """
+        只更新Actor网络和目标网络 - TD3延迟策略更新的核心
+        
+        Args:
+            agent_id: 当前智能体的ID索引 [0, num_agents)
+            states: 状态批次 [batch_size, full_obs_dim]
+            all_actions: 所有智能体当前动作 [batch_size, num_agents]
+            is_weights: 重要性采样权重（可选）
+        """
+        # --- 更新Actor ---
         actor_actions_logits = self.actor(states)
         actor_actions_one_hot = F.gumbel_softmax(actor_actions_logits, hard=True)
         
         # 构建包含当前智能体新动作的所有动作
-        # 动态替换当前agent_id的动作，修复硬编码bug
+        all_actions_one_hot = F.one_hot(all_actions, num_classes=self.action_dim).float()
+        all_actions_flat = all_actions_one_hot.view(all_actions_one_hot.size(0), -1)
+        
         modified_all_actions = all_actions_flat.clone()
         start_index = agent_id * self.action_dim
         end_index = (agent_id + 1) * self.action_dim
@@ -184,15 +232,57 @@ class MADDPGAgentEnhanced(nn.Module):
         actor_loss.backward()
         
         all_actor_params = list(self.actor.parameters()) + list(self.transformer.parameters())
-        torch.nn.utils.clip_grad_norm_(all_actor_params, 1.0)
+        
+        # 计算梯度范数用于诊断
+        actor_grad_norm = torch.nn.utils.clip_grad_norm_(all_actor_params, 1.0)
         
         self.actor_optimizer.step()
 
-        # 软更新目标网络
+        # 软更新目标网络（只在Actor更新时进行）
         self._soft_update(self.critic, self.critic_target)
         self._soft_update(self.actor, self.actor_target)
         
-        return td_errors.detach().cpu().numpy().flatten()
+        return actor_loss.item(), actor_grad_norm.item()
+
+    def update(self, agent_id, states, actions, rewards, next_states, dones, all_actions, next_all_actions, is_weights=None):
+        """
+        增强版更新方法 - 支持延迟策略更新（TD3风格）
+        
+        如果启用延迟策略更新，此函数仅用于向后兼容。
+        推荐使用分离的 update_critic 和 update_actor_and_targets 方法。
+        
+        Args:
+            agent_id: 当前智能体的ID索引 [0, num_agents)
+            states: 状态批次 [batch_size, full_obs_dim]
+            actions: 当前智能体动作批次 [batch_size]
+            rewards: 奖励批次 [batch_size]
+            next_states: 下一状态批次 [batch_size, full_obs_dim]
+            dones: 结束标志批次 [batch_size]
+            all_actions: 所有智能体当前动作 [batch_size, num_agents]
+            next_all_actions: 所有智能体下一动作 [batch_size, num_agents]
+            is_weights: 重要性采样权重
+        """
+        # 先更新Critic
+        td_errors, critic_loss, critic_grad_norm = self.update_critic(
+            agent_id, states, actions, rewards, next_states, dones, 
+            all_actions, next_all_actions, is_weights
+        )
+        
+        # 然后更新Actor和目标网络
+        actor_loss, actor_grad_norm = self.update_actor_and_targets(
+            agent_id, states, all_actions, is_weights
+        )
+        
+        # 返回完整的诊断指标（向后兼容）
+        diagnostics = {
+            'td_errors': td_errors,
+            'critic_loss': critic_loss,
+            'actor_loss': actor_loss,
+            'critic_grad_norm': critic_grad_norm,
+            'actor_grad_norm': actor_grad_norm
+        }
+        
+        return diagnostics
     
     def _soft_update(self, local_model, target_model):
         """软更新目标网络"""

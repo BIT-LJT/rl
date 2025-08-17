@@ -1,0 +1,25 @@
+模型检查点信息
+==================================================
+保存时间: 20250817_235918
+训练轮数: 2000
+训练进度: 66.7%
+当前噪声: 0.018242
+环境类型: full
+随机种子: 123
+智能体数量: 5
+近期平均奖励: 7610.29
+
+训练配置参数:
+  NUM_EPISODES: 3000
+  NUM_AGENTS: 5
+  NUM_POINTS: 30
+  BATCH_SIZE: 512
+  LR_ACTOR: 1e-06
+  LR_CRITIC: 0.0005
+  ENVIRONMENT_TYPE: full
+  RANDOM_SEED: 123
+  USE_ENHANCED_CRITIC: True
+  ENABLE_DELAYED_POLICY_UPDATES: True
+  ACTOR_UPDATE_FREQUENCY: 5
+  REWARD_EXPERIMENT_LEVEL: load_efficiency
+  COMMUNICATION_MODE: immediate

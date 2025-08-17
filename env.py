@@ -75,6 +75,9 @@ class SamplingEnv2_0:
         
         # 增强鲁棒性：初始化任务完成步骤标记，避免AttributeError
         self._tasks_completed_step = -1
+        
+        # 新增：跟踪上一步动作，用于决策摇摆惩罚
+        self.last_actions = [self.num_points] * self.num_agents  # 初始化为待机动作
 
         return self._get_obs()
 
@@ -131,7 +134,9 @@ class SamplingEnv2_0:
             # 新增全局信息
             "task_completion_ratio": task_completion_ratio,
             "all_tasks_completed": all_tasks_completed,
-            "total_loaded_agents": float(np.sum(self.agent_loads > 0))
+            "total_loaded_agents": float(np.sum(self.agent_loads > 0)),
+            # --- 新增: 智能体意图信息（所有智能体的上一时刻动作）---
+            "agent_last_actions": np.array(self.last_actions.copy()) if config.ENABLE_AGENT_INTENTION_OBS else np.array([self.num_points] * self.num_agents)
         }
 
     def _distance(self, pos1, pos2):
@@ -159,10 +164,9 @@ class SamplingEnv2_0:
         R_COEFF_APPROACH_HOME_LOADED = 0.05 #接近目标点奖励
         R_COEFF_APPROACH_HOME_LOW_ENERGY = 0.1 #接近基地奖励
         REWARD_SHAPING_CLIP = 10.0 #奖励剪裁
-        R_COLLAB_HIGH_PRIORITY = 20.0 #协作高优先级奖励
         R_ROLE_SPEED_BONUS = 20.0#角色速度奖励
         R_ROLE_CAPACITY_BONUS = 50.0#角色载重奖励
-        R_FAST_AGENT_HIGH_PRIORITY = 30.0  # 快速智能体处理高优先级任务的专业化奖励
+        R_FAST_AGENT_HIGH_PRIORITY = 50.0  # 快速智能体处理高优先级任务的专业化奖励（从60.0调整为50.0）
         R_STAY_HOME_AFTER_COMPLETION = 10.0  # 任务完成后留在基地(central_station)的奖励
         R_SMART_RETURN_AFTER_COMPLETION = 50.0  # 任务完成后智能选择回家(central_station)卸载的奖励
         FINAL_BONUS_ACCOMPLISHED = 1000.0#最终奖励
@@ -171,10 +175,11 @@ class SamplingEnv2_0:
         P_INACTIVITY = -10.0 #不活动惩罚
         P_ENERGY_DEPLETED = -50.0 #能量不足惩罚
         P_TIMEOUT_BASE = -30.0 #超时惩罚
-        P_CONFLICT = -2.0 #冲突惩罚
         P_EMPTY_RETURN = -20.0  # 空载回家惩罚
+        P_SWING_PENALTY = -5.0  # 新增：决策摇摆惩罚
+        P_WASTED_MOVE_PENALTY = -1.0  # 新增：选择已完成任务的惩罚
         P_LOW_LOAD_HEAVY_AGENT = -15.0  # 高容量智能体低载返回惩罚
-        P_HEAVY_AGENT_HIGH_PRIORITY = -15.0  # 重载智能体处理高优先级任务的效率惩罚
+        P_HEAVY_AGENT_HIGH_PRIORITY = -30.0  # 重载智能体处理高优先级任务的效率惩罚
         P_NOT_RETURN_AFTER_COMPLETION = -20.0  # 任务完成后有载重但不回家(central_station)的惩罚
         P_INVALID_TASK_ATTEMPT = -100.0  # 尝试执行已完成任务的重大惩罚
         P_OVERLOAD_ATTEMPT = -80.0  # 尝试超载的重大惩罚
@@ -256,12 +261,12 @@ class SamplingEnv2_0:
                     # === 记录替代任务的责任分配 ===
                     self._assign_task_responsibility(alternative_task, agent_idx, current_step)
                     assigned_tasks.add(alternative_task)  # 记录已分配
-                    rewards[agent_idx] += P_CONFLICT * 0.3  # 减轻冲突惩罚（智能分配奖励）
+                    # 冲突惩罚已删除，智能重分配不再给予惩罚
                     debug_print(f"🧠 智能体 {agent_idx} (优先级:{priority_score:.3f}) 智能重分配到任务点 {alternative_task}")
                 else:
                     # 没有替代任务，才回家
                     actions[agent_idx] = self.num_points 
-                    rewards[agent_idx] += P_CONFLICT
+                    # 冲突惩罚已删除，智能体返回基地不再受惩罚
                     debug_print(f"🏠 智能体 {agent_idx} 冲突后无替代任务，返回基地")
         
         for i, target in enumerate(actions):
@@ -270,6 +275,28 @@ class SamplingEnv2_0:
 
             prev_pos = self.agent_positions[i].copy()
             self.agent_paths[i].append(prev_pos)
+            
+            # --- 新增: 决策摇摆惩罚 ---
+            last_target = self.last_actions[i]
+            if last_target < self.num_points and target < self.num_points and last_target != target:
+                rewards[i] += P_SWING_PENALTY
+                debug_print(f"🔄️ 智能体 {i} 决策摇摆 (从 {last_target} -> {target})，惩罚: {P_SWING_PENALTY}")
+            
+            # --- 新增: 无效移动惩罚 ---
+            if target < self.num_points and self.done_points[target] == 1:
+                rewards[i] += P_WASTED_MOVE_PENALTY
+                debug_print(f"🚫 智能体 {i} 选择已完成任务 {target}，惩罚: {P_WASTED_MOVE_PENALTY}")
+            
+            # --- 新增: 连续能量惩罚机制 ---
+            energy_ratio = self.agent_energy[i] / self.agent_energy_max[i]
+            LOW_ENERGY_THRESHOLD = config.LOW_ENERGY_THRESHOLD  # 从config获取低能量阈值
+            if energy_ratio < LOW_ENERGY_THRESHOLD:
+                # 能量越低，惩罚越大（与能量剩余量成反比）
+                energy_penalty_intensity = (LOW_ENERGY_THRESHOLD - energy_ratio) / LOW_ENERGY_THRESHOLD
+                energy_penalty = P_TIME_STEP * config.ENERGY_PENALTY_MULTIPLIER * energy_penalty_intensity  # 从config获取惩罚倍数
+                rewards[i] += energy_penalty
+                if energy_ratio < 0.1:  # 极低能量时才打印提示，避免输出过多
+                    debug_print(f"⚡ 智能体 {i} 能量过低 ({energy_ratio*100:.1f}%)，连续惩罚: {energy_penalty:.2f}")
 
             if target == self.num_points + 1:#基地
                 dist = self._distance(prev_pos, self.central_station)#距离
@@ -318,6 +345,13 @@ class SamplingEnv2_0:
                     if i in [3, 4] and load_ratio >= 0.8:
                         rewards[i] += R_ROLE_CAPACITY_BONUS#大载重智能体额外奖励
                         debug_print(f"   🚛 大载重智能体额外奖励！")
+                    
+                    # --- 新增: 重载智能体非线性载重效率奖励 ---
+                    # 使用平方项强化满载行为，激励"批量运输"策略
+                    if i in [3, 4]:  # 重载智能体（Agent 3, 4）
+                        load_bonus = config.R_LOAD_EFFICIENCY * (load_ratio ** 2) * self.agent_loads[i]
+                        rewards[i] += load_bonus
+                        debug_print(f"   🚚 重载智能体 {i} 高效运输，载重率 {load_ratio:.2f}，非线性奖励: {load_bonus:.2f}")
                     
                     # 高容量智能体低载惩罚(<60%)
                     if i in [3, 4] and load_ratio < 0.6:
@@ -452,8 +486,7 @@ class SamplingEnv2_0:
                 
                 # 专业化奖励和惩罚机制
                 if priority == 1:  # 高优先级任务
-                    for j in range(self.num_agents):
-                        if i != j: rewards[j] += R_COLLAB_HIGH_PRIORITY
+                    # 协作奖励已删除，智能体之间不再有协作奖励机制
                     
                     if i in [0, 1, 2]:  # 快速智能体处理高优先级任务
                         # 专业化奖励：快速智能体天然适合高优先级任务
@@ -645,6 +678,9 @@ class SamplingEnv2_0:
                         rewards[i] += FINAL_PENALTY_NOT_AT_BASE
                         debug_print(f"警告：智能体 {i} 在回合超时时未返回基地，施加惩罚: {FINAL_PENALTY_NOT_AT_BASE}")
 
+        # 更新上一时刻动作记录
+        self.last_actions = list(actions)  # 使用解决冲突后的动作
+        
         return self._get_obs(), rewards, done
     
     def get_collaboration_analytics(self):
